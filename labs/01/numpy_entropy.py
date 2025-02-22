@@ -2,6 +2,7 @@
 import argparse
 
 import numpy as np
+from collections import Counter
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
@@ -12,39 +13,26 @@ parser.add_argument("--recodex", default=False, action="store_true", help="Evalu
 
 
 def main(args: argparse.Namespace) -> tuple[float, float, float]:
-    # TODO: Load data distribution, each line containing a datapoint -- a string.
     with open(args.data_path, "r") as data:
-        for line in data:
-            line = line.rstrip("\n")
-            # TODO: Process the line, aggregating data with built-in Python
-            # data structures (not NumPy, which is not suitable for incremental
-            # addition and string mapping).
+        data_counts = Counter([line.rstrip("\n") for line in data])
+        data_sum = sum(data_counts.values())
 
-    # TODO: Create a NumPy array containing the data distribution. The
-    # NumPy array should contain only data, not any mapping. Alternatively,
-    # the NumPy array might be created after loading the model distribution.
+    data_dist_dict = {line: count / data_sum for line, count in data_counts.items()}
 
-    # TODO: Load model distribution, each line `string \t probability`.
     with open(args.model_path, "r") as model:
-        for line in model:
-            line = line.rstrip("\n")
-            # TODO: Process the line, aggregating using Python data structures.
+        model_probs = [tuple(line.rstrip("\n").split("\t")) for line in model]
 
-    # TODO: Create a NumPy array containing the model distribution.
+    model_dist_dict = {line: float(prob) for line, prob in model_probs}
 
-    # TODO: Compute the entropy H(data distribution). You should not use
-    # manual for/while cycles, but instead use the fact that most NumPy methods
-    # operate on all elements (for example `*` is vector element-wise multiplication).
-    entropy = ...
+    model_dist = np.array([model_dist_dict.get(key, 0) for key in sorted(data_dist_dict.keys())])
+    data_dist = np.array([data_dist_dict.get(key, 0) for key in sorted(data_dist_dict.keys())])
+    print(model_dist)
+    print(data_dist)
 
-    # TODO: Compute cross-entropy H(data distribution, model distribution).
-    # When some data distribution elements are missing in the model distribution,
-    # return `np.inf`.
-    crossentropy = ...
 
-    # TODO: Compute KL-divergence D_KL(data distribution, model_distribution),
-    # again using `np.inf` when needed.
-    kl_divergence = ...
+    entropy = - np.sum(data_dist * np.log(data_dist))
+    crossentropy = - np.sum(data_dist * np.log(model_dist))
+    kl_divergence = np.sum(data_dist * np.log(data_dist / model_dist))
 
     # Return the computed values for ReCodEx to validate.
     return entropy, crossentropy, kl_divergence
