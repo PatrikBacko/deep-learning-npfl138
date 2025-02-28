@@ -5,6 +5,7 @@ import os
 import re
 
 import torch
+import torch.optim.adamw
 import torchmetrics
 
 import npfl138
@@ -33,7 +34,55 @@ class Dataset(npfl138.TransformedDataset):
         image = image.to(torch.float32) / 255  # image converted to float32 and rescaled to [0, 1]
         label = example["label"]  # a torch.Tensor with a single integer representing the label
         return image, label  # return an (input, target) pair
+    
 
+def return_optimizer(model, optimizer_type, momentum, learning_rate):
+    if optimizer_type == "SGD":
+        if momentum:
+            optimizer = torch.optim.SGD(
+                params=model.parameters(),
+                lr=learning_rate,
+                nesterov=True,
+                momentum=momentum,
+            )
+        else:
+            optimizer= torch.optim.SGD(
+                params=model.parameters(),
+                lr=learning_rate,
+            )
+
+    elif optimizer_type == 'Adam':
+        optimizer = torch.optim.Adam(
+            params=model.parameters(),
+            lr=learning_rate
+        )
+
+    return optimizer
+    
+
+def return_scheduler(optimizer, decay, lr, lr_final, epochs, batches_per_epoch):
+    if decay is None:
+        return None
+    elif decay == 'linear':
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer=optimizer,
+            start_factor = 1,
+            end_factor = lr_final/lr,
+            total_iters=epochs*batches_per_epoch,
+        )
+    elif decay == 'exponential':
+        scheduler = torch.optim.lr_scheduler.ExponentialLR(
+            optimizer=optimizer,
+            gamma= (lr_final/lr) ** (1/(epochs*batches_per_epoch))
+            )
+    elif decay == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer=optimizer,
+            T_max=epochs*batches_per_epoch,
+            eta_min=lr_final
+        )
+    
+    return scheduler
 
 def main(args: argparse.Namespace) -> dict[str, float]:
     # Set the random seed and the number of threads.
@@ -64,31 +113,24 @@ def main(args: argparse.Namespace) -> dict[str, float]:
     # Wrap the model in the TrainableModule.
     model = npfl138.TrainableModule(model)
 
-    # TODO: Use the required `args.optimizer` (either `SGD` or `Adam`) with
-    # the given `args.learning_rate`.
-    # - For `SGD`, if `args.momentum` is specified, use Nesterov momentum.
-    # - If `args.decay` is set, then also create a LR scheduler (otherwise, pass `None`).
-    #   The scheduler should decay the learning rate from the initial `args.learning_rate`
-    #   to the final `args.learning_rate_final`. The `scheduler.step()` is called after
-    #   each batch, so the number of scheduler iterations is the number of batches in all
-    #   training epochs (note that `len(train)` is the number of batches in one epoch).
-    #   - for `linear`, use `torch.optim.lr_scheduler.LinearLR` and set `start_factor`,
-    #     `end_factor`, and `total_steps` appropriately;
-    #   - for `exponential`, use `torch.optim.lr_scheduler.ExponentialLR` and set `gamma`
-    #     appropriately (be careful to compute it using float64 to avoid precision issues);
-    #   - for `cosine`, use `torch.optim.lr_scheduler.CosineAnnealingLR` and set `T_max`
-    #     and `eta_min` appropriately.
-    #   In all cases, you should reach `args.learning_rate_final` just after the training.
-    #
-    #   If a learning rate schedule is used, the `TrainableModule` automatically logs the
-    #   learning rate to the console and to TensorBoard. Additionally, you can find out
-    #   the next learning rate to be used by printing `model.scheduler.get_last_lr()[0]`.
-    #   Therefore, after the training, this value should be `args.learning_rate_final`.
-    ...
+    optimizer = return_optimizer(
+        model,
+        args.optimizer,
+        args.momentum,
+        args.learning_rate
+    )
+    scheduler = return_scheduler(
+        optimizer,
+        args.decay,
+        args.learning_rate,
+        args.learning_rate_final,
+        args.epochs,
+        len(train)
+    )
 
     model.configure(
-        optimizer=...,
-        scheduler=...,
+        optimizer=optimizer,
+        scheduler=scheduler,
         loss=torch.nn.CrossEntropyLoss(),
         metrics={"accuracy": torchmetrics.Accuracy("multiclass", num_classes=MNIST.LABELS)},
         logdir=args.logdir,

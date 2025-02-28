@@ -90,7 +90,7 @@ class Model(torch.nn.Module):
             correct = 0
             for batch in dataset.batches(self._args.batch_size):
                 images = batch["images"].to(self._W1.device)
-                labels = batch["labels"].to(self._W1.device).numpy(force=True).astype(np.int64)
+                labels = batch["labels"].numpy(force=True).astype(np.int64)
 
                 logits = self(images).numpy(force=True)
 
