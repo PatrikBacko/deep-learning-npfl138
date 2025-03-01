@@ -17,16 +17,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--evaluate", default=False, action="store_true", help="Evaluate the given model")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--render", default=False, action="store_true", help="Render during evaluation")
-parser.add_argument("--seed", default=42, type=int, help="Random seed.")
+parser.add_argument("--seed", default=None, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # If you add more arguments, ReCodEx will keep them with your default values.
 parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
-parser.add_argument("--epochs", default=100, type=int, help="Number of epochs.")
+parser.add_argument("--epochs", default=40, type=int, help="Number of epochs.")
 parser.add_argument("--model", default="gym_cartpole_model.pt", type=str, help="Output model path.")
 parser.add_argument("--hidden_layer_count", default=1, type=int, help='Number of hidden layers.')
-parser.add_argument("--hidden_layer_size", default=25, type=int, help='Size of hidden layers.')
-parser.add_argument("--learning_rate", default=0.005, type=float, help='Learning rate for traning.')
-parser.add_argument("--learning_rate_fina;", default=0.005, type=float, help='Final learning rate for traning.')
+parser.add_argument("--hidden_layer_size", default=35, type=int, help='Size of hidden layers.')
+parser.add_argument("--learning_rate", default=0.01, type=float, help='Learning rate for traning.')
+parser.add_argument("--learning_rate_final", default=0.001, type=float, help='Final learning rate for traning.')
 
 
 
@@ -121,13 +121,11 @@ def main(args: argparse.Namespace) -> torch.nn.Module | None:
         # TODO: Configure the model for training.
         optimizer = torch.optim.AdamW(params=model.parameters(), lr=args.learning_rate)
 
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        #     optimizer=optimizer,
-        #     T_max=args.epochs*len(train),
-        #     eta_min=0.001
-        # )
-
-        scheduler = None
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer=optimizer,
+            T_max=args.epochs*len(train),
+            eta_min=args.learning_rate_final
+        )
 
         model.configure(
             optimizer=optimizer,
@@ -141,8 +139,6 @@ def main(args: argparse.Namespace) -> torch.nn.Module | None:
             if epoch % 10 != 0:
                 return
             eps = 50
-            if epoch == args.epochs:
-                eps = 200
             score = evaluate_model(model, seed=None, episodes=eps)
 
             logs |= {"Evaluate_score": score}
@@ -152,6 +148,9 @@ def main(args: argparse.Namespace) -> torch.nn.Module | None:
         # Such callbacks are called after every epoch and if they modify the
         # logs dictionary, the values are logged on the console and to TensorBoard.
         model.fit(train, epochs=args.epochs, dev=None, callbacks=[callback])
+
+        score = evaluate_model(model, seed=None, episodes=100)
+        print("The average score was {}.".format(score))
 
         # Save the model, both the hyperparameters and the parameters. If you
         # added additional arguments to the `Model` constructor beyond `args`,

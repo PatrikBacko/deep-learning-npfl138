@@ -1,0 +1,17 @@
+{
+  "args : argparse.Namespace": {
+    "evaluate": false,
+    "recodex": false,
+    "render": false,
+    "seed": null,
+    "threads": 1,
+    "batch_size": 10,
+    "epochs": 40,
+    "model": "gym_cartpole_model.pt",
+    "hidden_layer_count": 1,
+    "hidden_layer_size": 35,
+    "learning_rate": 0.01,
+    "learning_rate_final": 0.001,
+    "logdir": "logs/gym_cartpole.py-2025-03-01_165526-bs=10,e=40,e=False,hlc=1,hls=35,lr=0.01,lrf=0.001,m=gym_cartpole_model.pt,r=False,r=False,s=None,t=1"
+  }
+}
