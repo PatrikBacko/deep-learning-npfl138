@@ -20,9 +20,14 @@ parser.add_argument("--render", default=False, action="store_true", help="Render
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
 # If you add more arguments, ReCodEx will keep them with your default values.
-parser.add_argument("--batch_size", default=..., type=int, help="Batch size.")
-parser.add_argument("--epochs", default=..., type=int, help="Number of epochs.")
+parser.add_argument("--batch_size", default=10, type=int, help="Batch size.")
+parser.add_argument("--epochs", default=100, type=int, help="Number of epochs.")
 parser.add_argument("--model", default="gym_cartpole_model.pt", type=str, help="Output model path.")
+parser.add_argument("--hidden_layer_count", default=1, type=int, help='Number of hidden layers.')
+parser.add_argument("--hidden_layer_size", default=25, type=int, help='Size of hidden layers.')
+parser.add_argument("--learning_rate", default=0.005, type=float, help='Learning rate for traning.')
+parser.add_argument("--learning_rate_fina;", default=0.005, type=float, help='Final learning rate for traning.')
+
 
 
 def evaluate_model(
@@ -64,13 +69,26 @@ class Model(npfl138.TrainableModule):
         # TODO: Create the model layers, with the last layer having 2 outputs.
         # To store a list of layers, you can use either `torch.nn.Sequential`
         # or `torch.nn.ModuleList`; you should *not* use a Python list.
-        ...
+
+        in_layers = GymCartpoleDataset.FEATURES
+        layers = []
+        for _ in range(args.hidden_layer_count):
+            layers.append(torch.nn.Linear(in_layers, args.hidden_layer_size))
+            layers.append(torch.nn.ReLU())
+            in_layers = args.hidden_layer_size
+
+        self.sequential = torch.nn.Sequential(
+            *layers,
+            torch.nn.Linear(args.hidden_layer_size, 2)
+        )
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         # TODO: Run your model. Because some inputs are on a CPU, you should
         # start by moving them to the `model.device`.
-        ...
+        x = inputs.to(self.device)
+        x = self.sequential(x)
 
+        return x
 
 def main(args: argparse.Namespace) -> torch.nn.Module | None:
     # Set the random seed and the number of threads.
@@ -78,10 +96,10 @@ def main(args: argparse.Namespace) -> torch.nn.Module | None:
     npfl138.global_keras_initializers()
 
     if not args.evaluate:
-        if args.batch_size is ...:
-            raise ValueError("You must specify the batch size, either in the defaults or on the command line.")
-        if args.epochs is ...:
-            raise ValueError("You must specify the number of epochs, either in the defaults or on the command line.")
+        # if args.batch_size is None:
+        #     raise ValueError("You must specify the batch size, either in the defaults or on the command line.")
+        # if args.epochs is None:
+        #     raise ValueError("You must specify the number of epochs, either in the defaults or on the command line.")
 
         # Create logdir name.
         args.logdir = os.path.join("logs", "{}-{}-{}".format(
@@ -101,13 +119,39 @@ def main(args: argparse.Namespace) -> torch.nn.Module | None:
         model = Model(args)
 
         # TODO: Configure the model for training.
-        model.configure(...)
+        optimizer = torch.optim.AdamW(params=model.parameters(), lr=args.learning_rate)
+
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        #     optimizer=optimizer,
+        #     T_max=args.epochs*len(train),
+        #     eta_min=0.001
+        # )
+
+        scheduler = None
+
+        model.configure(
+            optimizer=optimizer,
+            scheduler=scheduler,
+            loss=torch.nn.CrossEntropyLoss(),
+            metrics={"accuracy": torchmetrics.Accuracy("multiclass", num_classes=2)},
+            logdir=args.logdir
+        )
+
+        def callback(model, epoch, logs):
+            if epoch % 10 != 0:
+                return
+            eps = 50
+            if epoch == args.epochs:
+                eps = 200
+            score = evaluate_model(model, seed=None, episodes=eps)
+
+            logs |= {"Evaluate_score": score}
 
         # TODO: Train the model. Note that you can pass a list of callbacks to the
         # `fit` method, each being a callable accepting the model, epoch, and logs.
         # Such callbacks are called after every epoch and if they modify the
         # logs dictionary, the values are logged on the console and to TensorBoard.
-        model.fit(train, epochs=args.epochs, callbacks=[])
+        model.fit(train, epochs=args.epochs, dev=None, callbacks=[callback])
 
         # Save the model, both the hyperparameters and the parameters. If you
         # added additional arguments to the `Model` constructor beyond `args`,

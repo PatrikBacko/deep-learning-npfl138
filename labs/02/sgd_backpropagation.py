@@ -15,7 +15,7 @@ from npfl138 import MNIST
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
-parser.add_argument("--epochs", default=2, type=int, help="Number of epochs.")
+parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
 parser.add_argument("--hidden_layer", default=20, type=int, help="Size of the hidden layer.")
 parser.add_argument("--learning_rate", default=0.1, type=float, help="Learning rate.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
