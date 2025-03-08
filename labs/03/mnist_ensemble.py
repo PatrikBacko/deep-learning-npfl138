@@ -28,7 +28,7 @@ class Dataset(npfl138.TransformedDataset):
         return image, label  # return an (input, target) pair
 
 
-class EnsambleModule(torch.nn.Module):
+class EnsambleModel(npfl138.TrainableModule):
     def __init__(self, models, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.models = models
@@ -76,14 +76,10 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
     for i, model in enumerate(models):
         individual_accuracy = model.evaluate(dev)['test_accuracy']
 
-        ensemble_model = npfl138.TrainableModule(
-            EnsambleModule(models[:i+1])
-        )
-        ensemble_model.configure(
+        ensemble_model = EnsambleModel(models[:i+1]).configure(
             loss=torch.nn.CrossEntropyLoss(),
             metrics={"accuracy": torchmetrics.Accuracy("multiclass", num_classes=MNIST.LABELS)}
         )
-
         ensemble_accuracy = ensemble_model.evaluate(dev)['test_accuracy']
 
         # Store the accuracies
