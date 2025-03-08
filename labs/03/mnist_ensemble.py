@@ -11,9 +11,9 @@ from npfl138.datasets.mnist import MNIST
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
-parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
+parser.add_argument("--epochs", default=1, type=int, help="Number of epochs.")
 parser.add_argument("--hidden_layer_size", default=100, type=int, help="Size of the hidden layer.")
-parser.add_argument("--models", default=3, type=int, help="Number of models.")
+parser.add_argument("--models", default=2, type=int, help="Number of models.")
 parser.add_argument("--recodex", default=False, action="store_true", help="Evaluation in ReCodEx.")
 parser.add_argument("--seed", default=43, type=int, help="Random seed.")
 parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
@@ -28,6 +28,19 @@ class Dataset(npfl138.TransformedDataset):
         return image, label  # return an (input, target) pair
 
 
+class EnsambleModule(torch.nn.Module):
+    def __init__(self, models, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.models = models
+
+    def forward(self, x):
+        probs = torch.zeros((x.shape[0], MNIST.LABELS))
+        for model in self.models:
+            probs += torch.nn.functional.softmax(model(x), dim=1)
+
+        return probs / len(self.models)
+
+
 def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
     # Set the random seed and the number of threads.
     npfl138.startup(args.seed, args.threads)
@@ -40,7 +53,7 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
     dev = torch.utils.data.DataLoader(Dataset(mnist.dev), batch_size=args.batch_size)
 
     # Create the models.
-    models = []
+    models: list[npfl138.TrainableModule] = []
     for model in range(args.models):
         models.append(npfl138.TrainableModule(torch.nn.Sequential(
             torch.nn.Flatten(),
@@ -60,23 +73,18 @@ def main(args: argparse.Namespace) -> tuple[list[float], list[float]]:
         print("Done")
 
     individual_accuracies, ensemble_accuracies = [], []
-    for model in range(args.models):
-        # TODO: Compute the accuracy on the dev set for the individual `models[model]`.
-        individual_accuracy = ...
+    for i, model in enumerate(models):
+        individual_accuracy = model.evaluate(dev)['test_accuracy']
 
-        # TODO: Compute the accuracy on the dev set for the ensemble `models[0:model+1]`.
-        #
-        # Generally you can choose one of the following approaches:
-        # 1) Create a `npfl138.TrainableModule` subclass that gets several models to
-        #    ensemble during its constructions, and in `forward` it runs them on the given
-        #    batch and averages the predicted distributions. Then you can configure the
-        #    ensemble with the required metric (and a loss) and use its `evaluate` method.
-        # 2) Manually perform the averaging (using PyTorch or NumPy). In this case you do not
-        #    need to construct the ensemble model at all; instead, call `model.predict`
-        #    on the `dev` dataloader (with `data_with_labels=True` to indicate the dataloader
-        #    also contains the labels) and average the predicted distributions. To measure
-        #    accuracy, either do it completely manually or use `torchmetrics.Accuracy`.
-        ensemble_accuracy = ...
+        ensemble_model = npfl138.TrainableModule(
+            EnsambleModule(models[:i+1])
+        )
+        ensemble_model.configure(
+            loss=torch.nn.CrossEntropyLoss(),
+            metrics={"accuracy": torchmetrics.Accuracy("multiclass", num_classes=MNIST.LABELS)}
+        )
+
+        ensemble_accuracy = ensemble_model.evaluate(dev)['test_accuracy']
 
         # Store the accuracies
         individual_accuracies.append(individual_accuracy)
